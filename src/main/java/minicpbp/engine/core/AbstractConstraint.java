@@ -22,7 +22,7 @@ import minicpbp.state.StateBool;
 import minicpbp.state.StateDouble;
 
 import minicpbp.util.Belief;
-
+import minicpbp.util.exception.NotImplementedException;
 /**
  * Abstract class the most of the constraints
  * should extend.
@@ -50,6 +50,9 @@ public abstract class AbstractConstraint implements Constraint {
     private boolean exactWCounting = false;
     private boolean updateBeliefWarningPrinted = false;
 
+    private int failureCount;
+	private double normalizedFailureCount;
+
     public AbstractConstraint(Solver cp, IntVar[] vars) {
         this.cp = cp;
         active = cp.getStateManager().makeStateBool(true);
@@ -64,14 +67,19 @@ public abstract class AbstractConstraint implements Constraint {
                 // assumes all model variables have already been declared/registered
                 weight = 1.0 + ((double) vars.length) / ((double) cp.getVariables().size());
                 break;
+            case ANTI:
+                weight = 2.0 - ((double) vars.length) / ((double) cp.getVariables().size());
+                break;
         }
         localBelief = new StateDouble[vars.length][];
         ofs = new int[vars.length];
         outsideBelief = new double[vars.length][];
         prevOutsideBelief = new StateDouble[vars.length][];
 
+
         maxDomainSize = 0;
         for (int i = 0; i < vars.length; i++) {
+            vars[i].registerConstraint(this);
             ofs[i] = vars[i].min();
             localBelief[i] = new StateDouble[vars[i].max() - vars[i].min() + 1];
             outsideBelief[i] = new double[vars[i].max() - vars[i].min() + 1];
@@ -85,6 +93,37 @@ public abstract class AbstractConstraint implements Constraint {
         domainValues = new int[maxDomainSize];
         beliefValues = new double[maxDomainSize];
     }
+
+    public double getWeight() {
+		switch(cp.getWeighingScheme()) {
+			case SAME:
+				return 1.0;
+			case ARITY:
+				// assumes all model variables have already been declared/registered
+				return 1.0 + 2 * ((double) vars.length) / ((double) cp.getVariables().size());
+			case ANTI:
+				return 3.0 - 2 * ((double) vars.length) / ((double) cp.getVariables().size()); 
+			case WDEG:
+				return 1.0 + normalizedFailureCount;
+			case ANTIWDEG:
+				return 2.0 - normalizedFailureCount;
+			default:
+				throw new NotImplementedException();
+			}
+
+	}
+
+	public void setNormalizedFailureCount(double val) {
+		normalizedFailureCount = val;
+	}
+
+	public void incrementFailureCount() {
+		failureCount+=1;
+	}
+
+	public int getFailureCount() {
+		return failureCount;
+	}
 
     public void post() {
     }
@@ -210,7 +249,7 @@ public abstract class AbstractConstraint implements Constraint {
                 for (int j = 0; j < s; j++) {
                     int val = domainValues[j];
                     assert localBelief(i, val) <= beliefRep.one() && localBelief(i, val) >= beliefRep.zero() : "Should be normalized! localBelief(i,val) = " + localBelief(i, val);
-                    setOutsideBelief(i, val, vars[i].sendMessage(val, beliefRep.pow(localBelief(i, val), weight)));
+                    setOutsideBelief(i, val, vars[i].sendMessage(val, beliefRep.pow(localBelief(i, val), getWeight())));
                 }
                 normalizeBelief(i, (j, val) -> outsideBelief(j, val),
                         (j, val, b) -> setOutsideBelief(j, val, b));
@@ -248,9 +287,9 @@ public abstract class AbstractConstraint implements Constraint {
                             getSolver().fixPoint();
                             break; // all other values in this loop will have been removed from the domain
                         } else
-                            vars[i].receiveMessage(val, beliefRep.pow(localB, weight));
+                            vars[i].receiveMessage(val, beliefRep.pow(localB, getWeight()));
                     } else
-                        vars[i].receiveMessage(val, beliefRep.pow(localB, weight));
+                        vars[i].receiveMessage(val, beliefRep.pow(localB, getWeight()));
                 }
             }
         }

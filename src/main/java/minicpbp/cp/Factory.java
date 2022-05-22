@@ -341,6 +341,7 @@ public final class Factory {
         try {
             x.getSolver().propagateSolver();
         }
+        //if the affectation lead to a failure, its impact is 1.0
         catch (InconsistencyException e) {
             x.registerImpact(v, 1.0);
             throw e;

@@ -83,6 +83,11 @@ public class IntVarViewMul implements IntVar {
     }
 
     @Override
+    public void registerConstraint(Constraint c) {
+        x.registerConstraint(c);
+    }
+
+    @Override
     public int min() {
         if (a >= 0)
             return a * x.min();
@@ -316,6 +321,26 @@ public class IntVarViewMul implements IntVar {
     @Override
     public void setName(String name) {
 	this.name = name;
+    }
+
+    @Override
+    public void clearBeliefsOfBestValue() {
+        x.clearBeliefsOfBestValue();
+    }
+
+    @Override
+    public void registerBestValue() {
+        x.registerBestValue();
+    }
+
+    @Override
+    public boolean testStability() {
+        return x.testStability();
+    }
+
+    @Override
+    public int wDeg() {
+        return x.wDeg();
     }
     
 }

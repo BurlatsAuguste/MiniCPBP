@@ -72,6 +72,11 @@ public class IntVarViewOpposite implements IntVar {
     }
 
     @Override
+    public void registerConstraint(Constraint c) {
+        x.registerConstraint(c);
+    }
+
+    @Override
     public int min() {
         return -x.max();
     }
@@ -235,6 +240,26 @@ public class IntVarViewOpposite implements IntVar {
             return this.name;
         else
             return x.getName() + "'s view (opposite)";
+    }
+
+    @Override
+    public void clearBeliefsOfBestValue() {
+        x.clearBeliefsOfBestValue();
+    }
+
+    @Override
+    public void registerBestValue() {
+        x.registerBestValue();
+    }
+
+    @Override
+    public boolean testStability() {
+        return x.testStability();
+    }
+
+    @Override
+    public int wDeg() {
+        return x.wDeg();
     }
 
     @Override

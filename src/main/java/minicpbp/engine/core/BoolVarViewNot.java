@@ -87,6 +87,11 @@ public class BoolVarViewNot implements BoolVar {
     }
 
     @Override
+    public void registerConstraint(Constraint c) {
+        x.registerConstraint(c);
+    }
+
+    @Override
     public int min() {
         return 1-x.max();
     }
@@ -277,5 +282,25 @@ public class BoolVarViewNot implements BoolVar {
         }
         b.append("}");
         return b.toString();
+    }
+
+    @Override
+    public void clearBeliefsOfBestValue() {
+        x.clearBeliefsOfBestValue();
+    }
+
+    @Override
+    public void registerBestValue() {
+        x.registerBestValue();
+    }
+
+    @Override
+    public boolean testStability() {
+        return x.testStability();
+    }
+
+    @Override
+    public int wDeg() {
+        return x.wDeg();
     }
 }

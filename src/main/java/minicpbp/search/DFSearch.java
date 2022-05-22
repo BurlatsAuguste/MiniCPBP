@@ -59,6 +59,19 @@ public class DFSearch extends Search{
         this.branchingSecond = null;
     }
 
+    /**
+     * Creates a Depth First Search object with two given branching
+     * that defines the search tree dynamically.
+     *
+     * @param sm the state manager that will be saved and restored
+     *           at each node of the search tree
+     * @param branching a generator of closures in charge of defining the ordered
+     *                  children nodes at each node of the depth-first-search tree.
+     *                  When it returns an empty array, a solution is found.
+     *                  A backtrack occurs when a {@link InconsistencyException}
+     *                  is thrown.
+     * @param branchingSecond a second branching heuristic, used after the first restart
+     */
     public DFSearch(StateManager sm, Supplier<Procedure[]> branching, Supplier<Procedure[]> branchingSecond) {
         this.sm = sm;
         this.branching = branching;

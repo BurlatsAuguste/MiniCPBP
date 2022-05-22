@@ -18,6 +18,8 @@
 
 package minicpbp.engine.core;
 
+import java.util.ArrayList;
+
 import minicpbp.search.Objective;
 import minicpbp.state.StateManager;
 import minicpbp.state.StateStack;
@@ -25,6 +27,12 @@ import minicpbp.util.Procedure;
 import minicpbp.util.Belief;
 
 public interface Solver {
+
+    public enum StoppingCriterionType {
+		FIXE,
+		STABLE,
+		ENTROPY
+	}
 
     public enum PropaMode {
 	SP /* support propagation (aka standard constraint propagation) */, 
@@ -34,7 +42,10 @@ public interface Solver {
 
     public enum ConstraintWeighingScheme {
 	SAME   /* constraints all have the same weight; = 1.0 (default) */,
-	ARITY  /* a constraint's weight is related to its arity; = 1 + arity/total_nb_of_vars */
+	ARITY  /* a constraint's weight is related to its arity; = 1 + arity/total_nb_of_vars */,
+    ANTI /* a constraint's weight is related to its arity; = 2 - arity/total_nb_of_vars */,
+    WDEG,
+    ANTIWDEG
     } 
 
     /**
@@ -260,5 +271,21 @@ public interface Solver {
      * @return an array of branching variables
      */
     IntVar[] sample(double fraction, IntVar[] vars);
+
+    int stabilityHistoryLength();
+
+	void setStabilityHistoryLength(int stabilityHistoryLength);
+
+	double interestThreshold();
+
+	void setInterestThreshold(double interestThreshold);
+
+    void setStoppingCriterion(StoppingCriterionType stoppingCriterion);
+
+    double meanIteration();
+
+    int sumIteration();
+
+    ArrayList<IntVar> candidatesVariables();
 }
 

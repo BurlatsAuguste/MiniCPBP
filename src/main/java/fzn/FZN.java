@@ -34,6 +34,7 @@ import static minicpbp.cp.BranchingScheme.minEntropy;
 import static minicpbp.cp.BranchingScheme.impactEntropy;
 import static minicpbp.cp.BranchingScheme.minEntropyRegisterImpact;
 import static minicpbp.cp.BranchingScheme.minEntropyBiasedWheelSelectVal;
+import static minicpbp.cp.BranchingScheme.minEntropyInvariantDomain;
 import static minicpbp.cp.Factory.*;
 import static java.lang.reflect.Array.newInstance;
 

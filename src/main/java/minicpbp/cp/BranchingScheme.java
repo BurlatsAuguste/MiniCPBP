@@ -30,6 +30,7 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.Random;
+import java.util.ArrayList;
 
 import static minicpbp.cp.Factory.*;
 
@@ -494,6 +495,70 @@ public final class BranchingScheme {
         };
     }
 
+    public static Supplier<Procedure[]> minEntropyReduceCandidate(ArrayList<IntVar> candidatesVariables, IntVar[] x) {
+        boolean tracing = x[0].getSolver().tracingSearch();
+        Belief beliefRep = x[0].getSolver().getBeliefRep();
+        for(IntVar a: x)
+            a.setForBranching(true);
+        return () -> {
+            IntVar xs;
+            if(!candidatesVariables.isEmpty()) {
+                xs = selectMin(x,
+                    xi -> candidatesVariables.contains(xi),
+                    xi -> xi.entropy());
+            }
+            else {
+                xs = selectMin(x,
+                    xi -> xi.size() > 1,
+                    xi -> xi.entropy());
+            }
+            if (xs == null)
+                return EMPTY;
+            else {
+                int v = xs.valueWithMaxMarginal();
+                return branch(
+                        () -> {
+                            if (tracing)
+                                System.out.println("### branching on " + xs.getName() + "=" + v + "; marginal=" + beliefRep.rep2std(xs.maxMarginal()) + "; entropy=" + xs.entropy());
+                            branchEqual(xs, v);
+                        },
+                        () -> {
+                            if (tracing)
+                                System.out.println("### branching on " + xs.getName() + "!=" + v);
+                            branchNotEqual(xs, v);
+                        });
+            }
+        };
+    }
+
+    public static Supplier<Procedure[]> minEntropyInvariantDomain(IntVar[] x) {
+        boolean tracing = x[0].getSolver().tracingSearch();
+        Belief beliefRep = x[0].getSolver().getBeliefRep();
+        for(IntVar a: x)
+            a.setForBranching(true);
+        return () -> {
+            IntVar xs = selectMin(x,
+                    xi -> xi.size() > 1,
+                    xi -> xi.size()*xi.entropy()/Math.log(xi.size()));
+            if (xs == null)
+                return EMPTY;
+            else {
+                int v = xs.valueWithMaxMarginal();
+                return branch(
+                        () -> {
+                            if (tracing)
+                                System.out.println("### branching on " + xs.getName() + "=" + v + "; marginal=" + beliefRep.rep2std(xs.maxMarginal()) + "; entropy=" + xs.entropy());
+                            branchEqual(xs, v);
+                        },
+                        () -> {
+                            if (tracing)
+                                System.out.println("### branching on " + xs.getName() + "!=" + v);
+                            branchNotEqual(xs, v);
+                        });
+            }
+        };
+    }
+
     /**
      * Minimum entropy strategy.
      * It selects an unbound variable with the smallest entropy
@@ -543,11 +608,11 @@ public final class BranchingScheme {
         return () -> {
             IntVar xs = selectMin(x,
                     xi -> xi.size() > 1,
-                    xi -> xi.impact());
+                    xi -> -xi.impact());
             if (xs == null)
                 return EMPTY;
             else {
-                int v = xs.valueWithMinImpact();
+                int v = xs.valueWithMaxMarginal();
                 return branch(
                         () -> {
                             if (tracing)
@@ -763,6 +828,34 @@ public final class BranchingScheme {
         };
     }
 
+    public static Supplier<Procedure[]> domWdeg(IntVar... x) {
+        boolean tracing = x[0].getSolver().tracingSearch();
+        Belief beliefRep = x[0].getSolver().getBeliefRep();
+        for(IntVar a: x)
+            a.setForBranching(true);
+            return () -> {
+                IntVar xs = selectMin(x,
+                        xi -> xi.size() > 1,
+                        xi -> ((double) xi.size())/((double) xi.wDeg()));
+                if (xs == null)
+                    return EMPTY;
+                else {
+                    int v = xs.valueWithMinMarginal();
+                    return branch(
+                            () -> {
+                                if (tracing)
+                                    System.out.println("### branching on " + xs.getName() + "!=" + v + " marginal=" + (1 - beliefRep.rep2std(xs.minMarginal())));
+                                branchNotEqual(xs, v);
+                            },
+                            () -> {
+                                if (tracing)
+                                    System.out.println("### branching on " + xs.getName() + "=" + v);
+                                branchEqual(xs, v);
+                            });
+                }
+            };
+    }
+
     /**
      * Maximum Marginal strategy.
      * It selects an unbound variable with the largest marginal
@@ -784,6 +877,43 @@ public final class BranchingScheme {
             IntVar xs = selectMin(x,
                     xi -> xi.size() > 1,
                     xi -> -beliefRep.rep2std(xi.maxMarginal()));
+            if (xs == null)
+                return EMPTY;
+            else {
+                int v = xs.valueWithMaxMarginal();
+                return branch(
+                        () -> {
+                            if (tracing)
+                                System.out.println("### branching on " + xs.getName() + "=" + v + " marginal=" + beliefRep.rep2std(xs.maxMarginal()));
+                            branchEqual(xs, v);
+                        },
+                        () -> {
+                            if (tracing)
+                                System.out.println("### branching on " + xs.getName() + "!=" + v);
+                            branchNotEqual(xs, v);
+                        });
+            }
+        };
+    }
+
+
+    public static Supplier<Procedure[]> maxMarginalReduceCandidate(ArrayList<IntVar> candidatesVariables, IntVar... x ) {
+        boolean tracing = x[0].getSolver().tracingSearch();
+        Belief beliefRep = x[0].getSolver().getBeliefRep();
+        for(IntVar a: x)
+            a.setForBranching(true);
+        return () -> {
+            IntVar xs;
+            if(!candidatesVariables.isEmpty()) {
+                xs = selectMin(x,
+                    xi -> candidatesVariables.contains(xi),
+                    xi -> -beliefRep.rep2std(xi.maxMarginal()));
+            }
+            else {
+                xs = selectMin(x,
+                    xi -> xi.size() > 1,
+                    xi -> -beliefRep.rep2std(xi.maxMarginal()));
+            }
             if (xs == null)
                 return EMPTY;
             else {

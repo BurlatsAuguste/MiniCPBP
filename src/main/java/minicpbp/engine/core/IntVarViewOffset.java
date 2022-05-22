@@ -79,6 +79,11 @@ public class IntVarViewOffset implements IntVar {
     }
 
     @Override
+    public void registerConstraint(Constraint c) {
+        x.registerConstraint(c);
+    }
+
+    @Override
     public int min() {
         return x.min() + o;
     }
@@ -245,6 +250,26 @@ public class IntVarViewOffset implements IntVar {
     }
 
     @Override
+    public void clearBeliefsOfBestValue() {
+        x.clearBeliefsOfBestValue();
+    }
+
+    @Override
+    public void registerBestValue() {
+        x.registerBestValue();
+    }
+
+    @Override
+    public boolean testStability() {
+        return x.testStability();
+    }
+
+    @Override
+    public int wDeg() {
+        return x.wDeg();
+    }
+
+    @Override
     public void setName(String name) {
         this.name = name;
     }
@@ -271,4 +296,6 @@ public class IntVarViewOffset implements IntVar {
         return b.toString();
 
     }
+
+
 }

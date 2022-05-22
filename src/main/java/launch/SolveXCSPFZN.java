@@ -13,6 +13,8 @@ import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 
+import minicpbp.engine.core.Solver.StoppingCriterionType;
+
 import xcsp.XCSP;
 import fzn.FZN;
 
@@ -27,6 +29,8 @@ public class SolveXCSPFZN {
 		IE, //impact entropy
 		MIE, //min-entropy followed by impact entropy after first restart,
 		MNEBW, //min-entropy with biased wheel value selection
+		MNEDI, //
+		WDEG, // dom/wdeg heuristic
 	}
 
 	private static Map<String, BranchingHeuristic> branchingMap = new HashMap<String, BranchingHeuristic>() {
@@ -41,6 +45,16 @@ public class SolveXCSPFZN {
 			put("impact-entropy", BranchingHeuristic.IE);
 			put("impact-min-entropy", BranchingHeuristic.MIE);
 			put("min-entropy-biased", BranchingHeuristic.MNEBW);
+			put("min-entropy-invariant", BranchingHeuristic.MNEDI);
+			put("dom-wdeg", BranchingHeuristic.WDEG);
+		}
+	};
+
+	public static Map<String, StoppingCriterionType> stoppingCriterionMap = new HashMap<String, StoppingCriterionType>() {
+		{
+			put("fix", StoppingCriterionType.FIXE);
+			put("stability", StoppingCriterionType.STABLE);
+			put("entropy", StoppingCriterionType.ENTROPY);
 		}
 	};
 
@@ -64,6 +78,10 @@ public class SolveXCSPFZN {
 
 		String quotedValidSearchTypes = searchTypeMap.keySet().stream().sorted().map(x -> "\"" + x + "\"")
 				.collect(Collectors.joining(",\n"));
+		
+		String quotedValidStoppingCriterions = stoppingCriterionMap.keySet().stream().sorted().map(x -> "\"" + x + "\"")
+				.collect(Collectors.joining(",\n"));
+
 		
 		Option xcspFileOpt = Option.builder().longOpt("input").argName("FILE").required().hasArg()
 				.desc("input FZN or XCSP file").build();
@@ -119,6 +137,15 @@ public class SolveXCSPFZN {
 		Option traceNbIterOpt = Option.builder().longOpt("trace-iter").hasArg(false).desc("trace the number of BP iterations before each branching")
 				.build();
 
+		Option interestThresholdOpt = Option.builder().longOpt("interest-threshold").argName("INTEREST").hasArg().desc("TODO").build();
+
+		Option stabilityHistoryLengthOpt = Option.builder().longOpt("stability-history-length").argName("LENGTH").hasArg()
+				.desc("length of stability history for stronger stability").build();
+		
+		Option stoppingCriterionOpt = Option.builder().longOpt("stopping-criterion").argName("STOPPINGCRITERION").hasArg()
+				.desc("criterion used to determine when stop BP iteration.\nValid criterion are :\n" + quotedValidStoppingCriterions).build();
+
+
 		Options options = new Options();
 		options.addOption(xcspFileOpt);
 		options.addOption(branchingOpt);
@@ -139,6 +166,9 @@ public class SolveXCSPFZN {
 		options.addOption(initImpactOpt);
 		options.addOption(dynamicStopBPOpt);
 		options.addOption(traceNbIterOpt);
+		options.addOption(interestThresholdOpt);
+		options.addOption(stabilityHistoryLengthOpt);
+		options.addOption(stoppingCriterionOpt);
 
 		CommandLineParser parser = new DefaultParser();
 		CommandLine cmd = null;
@@ -158,6 +188,9 @@ public class SolveXCSPFZN {
 		checkSearchTypeOption(searchTypeStr);
 		TreeSearchType searchType = searchTypeMap.get(searchTypeStr);
 
+		String stopCritStr = cmd.getOptionValue("stopping-criterion");
+		checkStoppingCriterionOption(stopCritStr);
+		StoppingCriterionType stoppingCriterion = stoppingCriterionMap.get(stopCritStr);
 
 		String inputStr = cmd.getOptionValue("input");
 		checkInputOption(inputStr);
@@ -196,6 +229,21 @@ public class SolveXCSPFZN {
 		double variationThreshold = -Double.MAX_VALUE;
 		if(cmd.hasOption("var-threshold"))
 			variationThreshold = Double.parseDouble(cmd.getOptionValue("var-threshold"));
+		
+		double interestThreshold = 0.8;
+		if (cmd.hasOption("interest-threshold")) {
+			interestThreshold = Double.parseDouble(cmd.getOptionValue("interest-threshold"));
+		}
+		
+		int stabilityHistoryLength = 3;
+		if (cmd.hasOption("stability-history-length")) {
+			stabilityHistoryLength = Integer.parseInt(cmd.getOptionValue("stability-history-length"));
+			if(stabilityHistoryLength < 2) {
+				System.out.println("Erreur : stability-history-length must be at least 2");
+				System.exit(1);
+			}
+		}
+
 
 		boolean checkSolution = (cmd.hasOption("verify"));
 		boolean traceBP = (cmd.hasOption("trace-bp"));
@@ -243,6 +291,9 @@ public class SolveXCSPFZN {
 				xcsp.initImpact(initImpact);
 				xcsp.dynamicStopBP(dynamicStopBP);
 				xcsp.traceNbIter(traceNbIter);
+				xcsp.interestThreshold(interestThreshold);
+				xcsp.stabilityHistoryLength(stabilityHistoryLength);
+				xcsp.stoppingCriterion(stoppingCriterion);
 				xcsp.solve(heuristic, timeout, statsFileStr, solFileStr);
 			}
 		} catch (Exception e) {
@@ -311,6 +362,16 @@ public class SolveXCSPFZN {
 		} catch (Exception e) {
 			e.printStackTrace();
 			System.out.println("can not create file " + filename);
+			System.exit(1);
+		}
+	}
+
+	private static void checkStoppingCriterionOption(String stopCritStr) {
+		if(!stoppingCriterionMap.containsKey(stopCritStr)) {
+			System.out.println("invalid stopping criterion " + stopCritStr);
+			System.out.println("Stopping criterion should be one of the following: ");
+			for (String criterion : stoppingCriterionMap.keySet())
+				System.out.println(criterion);
 			System.exit(1);
 		}
 	}

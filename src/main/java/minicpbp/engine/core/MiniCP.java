@@ -35,6 +35,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
 import java.util.Random;
+import java.util.ArrayList;
 
 public class MiniCP implements Solver {
 
@@ -46,6 +47,10 @@ public class MiniCP implements Solver {
 
     private StateStack<IntVar> variables;
     private StateStack<Constraint> constraints;
+
+    private ArrayList<IntVar> candidatesVariables;
+    private static int stabilityHistoryLength = 3;
+    private static double interestThreshold = 0.8;
 
     //******** PARAMETERS ********
     // SP  /* support propagation (aka standard constraint propagation) */
@@ -77,6 +82,8 @@ public class MiniCP implements Solver {
     private static boolean traceNbIter = false;
     //****************************
 
+    // to decide when BP should stop
+    private static StoppingCriterionType stoppingCriterion = StoppingCriterionType.FIXE;
 
     // for message damping
     private boolean prevOutsideBeliefRecorded = false;
@@ -84,10 +91,16 @@ public class MiniCP implements Solver {
     private double oldEntropy;
     private static double variationThreshold = 0.1;
 
+    private int sum_iterations;
+    private int nb_propagation;
+
     public MiniCP(StateManager sm) {
         this.sm = sm;
         variables = new StateStack<>(sm);
         constraints = new StateStack<>(sm);
+        candidatesVariables = new ArrayList<>();
+        sum_iterations = 0;
+        nb_propagation = 0;
     }
 
     @Override
@@ -120,6 +133,10 @@ public class MiniCP implements Solver {
 
     public ConstraintWeighingScheme getWeighingScheme() {
         return Wscheme;
+    }
+
+    public void setStoppingCriterion(StoppingCriterionType stoppingCriterion) {
+        MiniCP.stoppingCriterion = stoppingCriterion;
     }
 
     public void setTraceBPFlag(boolean traceBP) {
@@ -178,6 +195,34 @@ public class MiniCP implements Solver {
         return traceSearch;
     }
 
+    public ArrayList<IntVar> candidatesVariables() {
+		return this.candidatesVariables;
+	}
+
+    public int stabilityHistoryLength(){
+		return MiniCP.stabilityHistoryLength;
+	}
+
+	public void setStabilityHistoryLength(int stabilityHistoryLength) {
+		MiniCP.stabilityHistoryLength = stabilityHistoryLength;
+	}
+
+	public double interestThreshold() {
+		return MiniCP.interestThreshold;
+	}
+
+	public void setInterestThreshold(double interestThreshold) {
+		MiniCP.interestThreshold = interestThreshold;
+	}
+
+    public double meanIteration() {
+        return ((double)sum_iterations / ((double) nb_propagation));
+    }
+
+    public int sumIteration() {
+        return sum_iterations;
+    }
+
     public void schedule(Constraint c) {
         if (c.isActive() && !c.isScheduled()) {
             c.setScheduled(true);
@@ -197,15 +242,22 @@ public class MiniCP implements Solver {
     @Override
     public void fixPoint() {
         notifyFixPoint();
-        try {
-            while (!propagationQueue.isEmpty()) {
-                propagate(propagationQueue.remove());
+        if(!propagationQueue.isEmpty()){
+            Constraint c;
+            c = propagationQueue.remove();
+            try {
+                propagate(c);
+                while (!propagationQueue.isEmpty()) {
+                    c = propagationQueue.remove();
+                    propagate(c);
+                }
+            } catch (InconsistencyException e) {
+                // empty the queue and unset the scheduled status
+                c.incrementFailureCount();
+                while (!propagationQueue.isEmpty())
+                    propagationQueue.remove().setScheduled(false);
+                throw e;
             }
-        } catch (InconsistencyException e) {
-            // empty the queue and unset the scheduled status
-            while (!propagationQueue.isEmpty())
-                propagationQueue.remove().setScheduled(false);
-            throw e;
         }
     }
 
@@ -228,6 +280,50 @@ public class MiniCP implements Solver {
         return count;
     }
 
+    private void normalizeConstrWeight() {
+		double sumWeight = 0.0;
+		for(int i=0; i < constraints.size(); i++)
+			sumWeight += constraints.get(i).getFailureCount();
+		for(int i=0; i < constraints.size(); i++) {
+			if(sumWeight == 0.0)
+				constraints.get(i).setNormalizedFailureCount(0.0);
+			else
+				constraints.get(i).setNormalizedFailureCount(((double) constraints.get(i).getFailureCount())/sumWeight);
+		}
+	}
+
+    private boolean stoppingCriterionEntropy(int nbVar, int iter) {
+        double sumEntropy = 0.0;
+        for(int i =0; i < variables.size(); i++) {
+            if(!variables.get(i).isBound() && variables.get(i).isForBranching()){
+                sumEntropy += variables.get(i).entropy()/Math.log(variables.get(i).size());
+            }
+        }
+        sumEntropy = sumEntropy/nbVar;
+        if(iter > 1 && (this.oldEntropy - sumEntropy) < variationThreshold && (this.oldEntropy - sumEntropy)>=0) {
+            return true;
+        }
+                    
+        this.oldEntropy = sumEntropy;
+        return false;
+    }
+
+    private boolean stoppingCriterionStability(int iter) {
+		for(int i = 0; i < this.variables.size(); i++) {
+			if(!this.variables.get(i).isBound() && this.variables.get(i).isForBranching()) {
+				if(iter == 1)
+					this.variables.get(i).clearBeliefsOfBestValue();
+				this.variables.get(i).registerBestValue();
+				if(this.variables.get(i).testStability())
+					candidatesVariables.add(this.variables.get(i));
+			}
+		}
+		if(candidatesVariables.size() > 0 || iter >= beliefPropaMaxIter)
+			return true;
+
+		return false;
+	}
+
     /**
      * Belief Propagation
      * standard version, with two distinct message-passing phases
@@ -237,6 +333,8 @@ public class MiniCP implements Solver {
     public void beliefPropa() {
         notifyBeliefPropa();
         try {
+            if(Wscheme == ConstraintWeighingScheme.WDEG || Wscheme == ConstraintWeighingScheme.ANTIWDEG)
+				normalizeConstrWeight();
             if (resetMarginalsBeforeBP) {
                 // start afresh at each search-tree node
                 for (int i = 0; i < variables.size(); i++) {
@@ -249,6 +347,8 @@ public class MiniCP implements Solver {
             }
             int nbVar = nbBranchingVariables();
             int nb_iter = beliefPropaMaxIter;
+            boolean stopping = false;
+            candidatesVariables.clear();
             for (int iter = 1; iter <= beliefPropaMaxIter; iter++) {
                 BPiteration();
                 if (dampingMessages())
@@ -259,7 +359,21 @@ public class MiniCP implements Solver {
                         System.out.println(variables.get(i).getName() + " dsize="+variables.get(i).size()+" " + variables.get(i).toString());
                     }
                 }
-                if(dynamicStopBP){
+                switch(stoppingCriterion) {
+                    case FIXE:
+                        break;
+                    case ENTROPY :
+                        stopping = stoppingCriterionEntropy(nbVar, iter);
+                        break;
+                    case STABLE:
+                        stopping = stoppingCriterionStability(iter);
+                        break;
+                }
+                if(stopping) {
+                    nb_iter = iter;
+                    break;
+                }
+                /*if(dynamicStopBP) {
                     double sumEntropy = 0.0;
                     for(int i =0; i < variables.size(); i++) {
                         if(!variables.get(i).isBound() && variables.get(i).isForBranching()){
@@ -267,16 +381,20 @@ public class MiniCP implements Solver {
                         }
                     }
                     sumEntropy = sumEntropy/nbVar;
-                    if(iter > 1 && (oldEntropy - sumEntropy) < variationThreshold && (oldEntropy - sumEntropy)>=0) {
-                        nb_iter = iter;
+                    System.out.println("entropy : " + sumEntropy);
+                    if(iter > 1 && (this.oldEntropy - sumEntropy) < variationThreshold && (this.oldEntropy - sumEntropy)>=0) {
                         break;
                     }
-                    
-                    oldEntropy = sumEntropy;
-                }
+                                
+                    this.oldEntropy = sumEntropy;
+                    //return false;
+                }*/
+                
             }
-            if(traceNbIter)
-                System.out.println("nb iter : " +nb_iter);
+            sum_iterations += nb_iter;
+            nb_propagation += 1;
+            //if(traceNbIter)
+                //System.out.println("nb iter : " +nb_iter);
 
         } catch (InconsistencyException e) {
             // empty the queue and unset the scheduled status

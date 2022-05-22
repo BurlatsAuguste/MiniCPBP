@@ -22,9 +22,11 @@ import minicpbp.state.StateStack;
 import minicpbp.util.Procedure;
 import minicpbp.util.exception.InconsistencyException;
 import minicpbp.util.Belief;
+import minicpbp.engine.core.Constraint;
 
 import java.security.InvalidParameterException;
 import java.util.Set;
+import java.util.ArrayList;
 
 /**
  * Implementation of a variable
@@ -39,7 +41,10 @@ public class IntVarImpl implements IntVar {
     private StateStack<Constraint> onDomain;
     private StateStack<Constraint> onBind;
     private StateStack<Constraint> onBounds;
+    private ArrayList<Constraint> constraints; //contains all constraints that are applied on the variable
     private boolean isForBranching = false;
+    private ArrayList<Double> beliefsOfBestValue;
+    private int bestValue;
 
     private DomainListener domListener = new DomainListener() {
         @Override
@@ -77,6 +82,7 @@ public class IntVarImpl implements IntVar {
      */
     public IntVarImpl(Solver cp, int n) {
         this(cp, 0, n - 1);
+        beliefsOfBestValue = new ArrayList<>();
     }
 
     /**
@@ -95,6 +101,8 @@ public class IntVarImpl implements IntVar {
         onDomain = new StateStack<>(cp.getStateManager());
         onBind = new StateStack<>(cp.getStateManager());
         onBounds = new StateStack<>(cp.getStateManager());
+        constraints = new ArrayList<>();
+        beliefsOfBestValue = new ArrayList<>();
         cp.registerVar(this);
     }
 
@@ -106,6 +114,7 @@ public class IntVarImpl implements IntVar {
      */
     public IntVarImpl(Solver cp, Set<Integer> values) {
         this(cp, values.stream().min(Integer::compare).get(), values.stream().max(Integer::compare).get());
+        beliefsOfBestValue = new ArrayList<>();
         if (values.isEmpty()) throw new InvalidParameterException("at least one setValue in the domain");
         for (int i = min(); i <= max(); i++) {
             if (!values.contains(i)) {
@@ -168,6 +177,10 @@ public class IntVarImpl implements IntVar {
         onBounds.push(c);
     }
 
+    @Override 
+    public void registerConstraint(Constraint c) {
+        constraints.add(c);
+    }
 
     protected void scheduleAll(StateStack<Constraint> constraints) {
         for (int i = 0; i < constraints.size(); i++)
@@ -281,8 +294,8 @@ public class IntVarImpl implements IntVar {
 
     @Override
     public double impact() {
-        //System.out.println("--------------------------------");
-        //System.out.println(name);
+        //System.out.println("--------------------------------------------");
+        //System.out.println(name + " : " + domain.impact());
         return domain.impact();
     }
 
@@ -333,5 +346,47 @@ public class IntVarImpl implements IntVar {
     @Override
     public void setName(String name) {
         this.name = name;
+    }
+
+    @Override
+    public void clearBeliefsOfBestValue(){
+        this.beliefsOfBestValue.clear();
+    }
+
+    @Override
+    public boolean testStability() {
+
+        if(this.beliefsOfBestValue.size() >= cp.stabilityHistoryLength())// && 
+            return Math.abs(this.maxMarginal() - this.beliefsOfBestValue.get(this.beliefsOfBestValue.size() - 2)) <= cp.variationThreshold();
+            //return true;
+        
+        return false;
+    }
+
+    @Override
+    public int wDeg(){
+        int sum = 0;
+        for(int i = 0; i < constraints.size(); i++) {
+            //in dom/wdeg all constraint's weigth are initialized to 1, that's why there is a +1 for each constraint
+            sum += constraints.get(i).getFailureCount() + 1;
+        }
+        return sum;
+    }
+
+    @Override
+    public void registerBestValue() {
+        int valueWithMaxMarginal = this.valueWithMaxMarginal();
+        double maxMarginal = this.maxMarginal();
+        if((maxMarginal - 1.0/domain.size()) >= (cp.interestThreshold()*(1.0/domain.size()))) {
+            if(valueWithMaxMarginal != this.bestValue) {
+                this.bestValue = valueWithMaxMarginal;
+                this.beliefsOfBestValue.clear();
+            }
+            this.beliefsOfBestValue.add(maxMarginal);
+        }
+        else {
+            this.beliefsOfBestValue.clear();
+        }
+
     }
 }

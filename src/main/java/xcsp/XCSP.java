@@ -21,6 +21,7 @@ import minicpbp.engine.core.BoolVar;
 import minicpbp.engine.core.IntVar;
 import minicpbp.engine.core.Solver;
 import minicpbp.engine.core.Solver.PropaMode;
+import minicpbp.engine.core.Solver.StoppingCriterionType;
 import minicpbp.search.LDSearch;
 import minicpbp.search.Search;
 import minicpbp.search.SearchStatistics;
@@ -65,6 +66,10 @@ import static minicpbp.cp.BranchingScheme.minEntropy;
 import static minicpbp.cp.BranchingScheme.impactEntropy;
 import static minicpbp.cp.BranchingScheme.minEntropyRegisterImpact;
 import static minicpbp.cp.BranchingScheme.minEntropyBiasedWheelSelectVal;
+import static minicpbp.cp.BranchingScheme.minEntropyInvariantDomain;
+import static minicpbp.cp.BranchingScheme.maxMarginalReduceCandidate;
+import static minicpbp.cp.BranchingScheme.minEntropyReduceCandidate;
+import static minicpbp.cp.BranchingScheme.domWdeg;
 import static minicpbp.cp.Factory.*;
 import static java.lang.reflect.Array.newInstance;
 
@@ -1035,6 +1040,24 @@ public class XCSP implements XCallbacks2 {
 		XCSP.traceNbIter = traceNbIter;
 	}
 
+	private static int stabilityHistoryLength = 3;
+
+	public void stabilityHistoryLength(int stabilityHistoryLength) {
+		XCSP.stabilityHistoryLength = stabilityHistoryLength;
+	}
+
+    private static double interestThreshold = 0.8;
+
+	public void interestThreshold(double interestThreshold) {
+		XCSP.interestThreshold = interestThreshold;
+	}
+
+	private static StoppingCriterionType stoppingCriterion = StoppingCriterionType.FIXE;
+
+	public void stoppingCriterion(StoppingCriterionType stoppingCriterion) {
+		XCSP.stoppingCriterion = stoppingCriterion;
+	}
+
 	private Search makeSearch(Supplier<Procedure[]> branching) {
 		Search search = null;
 		switch (searchType) {
@@ -1063,6 +1086,9 @@ public class XCSP implements XCallbacks2 {
 		minicp.setDamp(damp);
 		minicp.setDampingFactor(dampingFactor);
 		minicp.setVariationThreshold(variationThreshold);
+		minicp.setStabilityHistoryLength(stabilityHistoryLength);
+		minicp.setInterestThreshold(interestThreshold);
+		minicp.setStoppingCriterion(stoppingCriterion);
 
 		if (hasFailed) {
 			System.out.println("problem failed before initiating the search");
@@ -1084,7 +1110,10 @@ public class XCSP implements XCallbacks2 {
 			search = makeSearch(maxMarginalStrength(vars));
 			break;
 		case MXM:
-			search = makeSearch(maxMarginal(vars));
+			if(XCSP.stoppingCriterion != StoppingCriterionType.STABLE)
+				search = makeSearch(maxMarginal(vars));
+			else
+			search = makeSearch(maxMarginalReduceCandidate(minicp.candidatesVariables(), vars));
 			break;
 		case MNMS:
 			search = makeSearch(minMarginalStrength(vars));
@@ -1093,7 +1122,10 @@ public class XCSP implements XCallbacks2 {
 			search = makeSearch(minMarginal(vars));
 			break;
 		case MNE:
-			search = makeSearch(minEntropy(vars));
+			if(XCSP.stoppingCriterion != StoppingCriterionType.STABLE)
+				search = makeSearch(minEntropy(vars));
+			else
+				search = makeSearch(minEntropyReduceCandidate(minicp.candidatesVariables(), vars));
 			break;
 		case IE:
 			search = makeSearch(impactEntropy(vars));
@@ -1108,6 +1140,13 @@ public class XCSP implements XCallbacks2 {
 			break;
 		case MNEBW:
 			search = makeSearch(minEntropyBiasedWheelSelectVal(vars));
+			break;
+		case MNEDI:
+			search = makeSearch(minEntropyInvariantDomain(vars));
+			break;
+		case WDEG:
+			minicp.setMode(PropaMode.SP);
+			search = makeSearch(domWdeg(vars));
 			break;
 		default:
 			System.out.println("unknown search strategy");
@@ -1211,6 +1250,8 @@ public class XCSP implements XCallbacks2 {
 		out.println("failures: " + stats.numberOfFailures());
 		out.println("nodes: " + stats.numberOfNodes());
 		out.println("runtime (ms): " + runtime);
+		out.println("mean_iteration: " + minicp.meanIteration());
+		out.println("sum_iterations: " + minicp.sumIteration());
 
 		out.close();
 

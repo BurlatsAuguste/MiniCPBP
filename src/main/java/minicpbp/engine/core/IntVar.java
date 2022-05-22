@@ -311,6 +311,23 @@ public interface IntVar {
      */
     public boolean isForBranching();
 
+    /**
+     * TODO
+     */
+    public void clearBeliefsOfBestValue();
+
+    /**
+     * TODO
+     */
+    public void registerBestValue();
+
+    /**
+     * TODO
+     */
+    public boolean testStability();
+
     public String getName();
     public void setName(String name);
+    public int wDeg();
+    public void registerConstraint(Constraint c);
 }

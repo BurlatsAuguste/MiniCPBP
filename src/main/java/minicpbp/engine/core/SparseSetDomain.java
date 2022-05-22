@@ -365,10 +365,13 @@ public class SparseSetDomain implements IntDomain {
         int s = fillArray(domainValues);
         double impact = 0.0;
         for(int j = 0; j < s; j++) {
-           // System.out.println("value : " + domainValues[j] + " , impact : " + impactOfValue(domainValues[j]));
-            impact += 1 - impactOfValue(domainValues[j]);
+            //System.out.println("value : " + domainValues[j] + "nb_mesures : " + " , impact : " + impactOfValue(domainValues[j]) + ", marginal : " + beliefRep.rep2std(marginal(domainValues[j])));
+            //impact += 1 - impactOfValue(domainValues[j]);
+            //impact += impactOfValue(domainValues[j]);
+            impact += impactOfValue(domainValues[j]) * beliefRep.rep2std(marginal(domainValues[j]));
         }
         //System.out.println("impact : " +impact);
+        //return impact/domain.size();
         return impact;
     }
 

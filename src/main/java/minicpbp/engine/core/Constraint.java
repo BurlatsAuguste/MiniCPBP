@@ -108,4 +108,9 @@ public interface Constraint {
      */
     public double weight();
 
+    public void setNormalizedFailureCount(double val);
+    public void incrementFailureCount();
+    public int getFailureCount();
+    public double getWeight();
+
 }
